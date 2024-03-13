@@ -11,6 +11,7 @@ members = [
     "node",
     "runtime",
     "runtime/fuzz",
+    "stress",
 ]
 
 [workspace.dependencies]

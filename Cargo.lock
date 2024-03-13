@@ -10647,6 +10647,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "stress"
+version = "0.1.0"
+dependencies = [
+ "avail-base",
+ "avail-core",
+ "binary-merkle-tree",
+ "bounded-collections",
+ "cfg-if",
+ "derive_more",
+ "ethabi",
+ "frame-support",
+ "frame-system",
+ "impl-trait-for-tuples",
+ "kate",
+ "libm",
+ "log",
+ "once_cell",
+ "parity-scale-codec",
+ "rs_merkle",
+ "scale-info",
+ "serde",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-runtime-interface 24.0.0 (git+https://github.com/availproject/polkadot-sdk.git?tag=polkadot-1.7.1-patch)",
+ "sp-std 14.0.0 (git+https://github.com/availproject/polkadot-sdk.git?tag=polkadot-1.7.1-patch)",
+ "sp-version",
+ "sp-weights",
+ "static_assertions",
+ "tokio",
+]
+
+[[package]]
 name = "strobe-rs"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
