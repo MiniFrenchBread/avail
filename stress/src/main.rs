@@ -1,10 +1,14 @@
-use std::{error::Error, time::Duration};
+#[macro_use]
+extern crate tracing;
+
+use std::{error::Error, str::FromStr, time::Duration};
 
 use avail_core::{header::HeaderExtension, AppExtrinsic, HeaderVersion};
 use frame_system::limits::BlockLength;
 use kate::{gridgen::EvaluationGrid, Seed};
 use sp_core::H256;
 use sp_runtime::SaturatedConversion;
+use tracing::Level;
 
 pub fn get_empty_header(data_root: H256, version: HeaderVersion) -> HeaderExtension {
 	use avail_core::{header::extension::v3, DataLookup};
@@ -90,14 +94,15 @@ fn build_extension(
 	let grid = match maybe_grid {
 		Ok(res) => res,
 		Err(message) => {
-			log::error!("NODE_CRITICAL_ERROR_001 - A critical error has occurred: {message:?}.");
-			log::error!("NODE_CRITICAL_ERROR_001 - If you see this, please warn Avail team and raise an issue.");
+			error!("NODE_CRITICAL_ERROR_001 - A critical error has occurred: {message:?}.");
+			error!("NODE_CRITICAL_ERROR_001 - If you see this, please warn Avail team and raise an issue.");
 			HeaderExtensionBuilderMetrics::observe_total_execution_time(
 				build_extension_start.elapsed(),
 			);
 			return get_empty_header(data_root, version);
 		},
 	};
+	info!("grid dims: {:?}", grid.dims());
 
 	// Build the commitment
 	let timer = std::time::Instant::now();
@@ -107,8 +112,8 @@ fn build_extension(
 	let commitment = match maybe_commitment {
 		Ok(res) => res,
 		Err(message) => {
-			log::error!("NODE_CRITICAL_ERROR_002 - A critical error has occurred: {message:?}.");
-			log::error!("NODE_CRITICAL_ERROR_002 - If you see this, please warn Avail team and raise an issue.");
+			error!("NODE_CRITICAL_ERROR_002 - A critical error has occurred: {message:?}.");
+			error!("NODE_CRITICAL_ERROR_002 - If you see this, please warn Avail team and raise an issue.");
 			HeaderExtensionBuilderMetrics::observe_total_execution_time(
 				build_extension_start.elapsed(),
 			);
@@ -171,6 +176,9 @@ const BLOB_SIZE: usize = 512 * 1024;
 async fn main() -> Result<(), Box<dyn Error>> {
 	// enable backtraces
 	std::env::set_var("RUST_BACKTRACE", "1");
+	tracing_subscriber::fmt()
+		.with_max_level(Level::from_str("info").unwrap())
+		.init();
 
 	let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
 	let mut broadcast_txs = vec![];
@@ -201,7 +209,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 	tokio::spawn(async move {
 		while let Some(id) = result_rx.recv().await {
-			println!("{:?} task done.", id);
+			log::info!("{:?} task done.", id);
 		}
 	});
 
