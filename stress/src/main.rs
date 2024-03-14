@@ -8,6 +8,7 @@ use frame_system::limits::BlockLength;
 use kate::{gridgen::EvaluationGrid, Seed};
 use sp_core::H256;
 use sp_runtime::SaturatedConversion;
+use tokio::time::{sleep_until, Instant};
 use tracing::Level;
 
 pub fn get_empty_header(data_root: H256, version: HeaderVersion) -> HeaderExtension {
@@ -102,7 +103,6 @@ fn build_extension(
 			return get_empty_header(data_root, version);
 		},
 	};
-	info!("grid dims: {:?}", grid.dims());
 
 	// Build the commitment
 	let timer = std::time::Instant::now();
@@ -170,7 +170,7 @@ fn build(
 
 const N: usize = 64;
 const RPS: u32 = 20;
-const BLOB_SIZE: usize = 512 * 1024;
+const BLOB_SIZE: usize = 496 * 1024 * 2;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -180,11 +180,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		.with_max_level(Level::from_str("info").unwrap())
 		.init();
 
-	let (result_tx, mut result_rx) = tokio::sync::mpsc::unbounded_channel();
 	let mut broadcast_txs = vec![];
 	for _ in 0..N {
 		let (task_tx, mut task_rx) = tokio::sync::mpsc::unbounded_channel();
-		let tx = result_tx.clone();
 		tokio::spawn(async move {
 			let extrinsics = vec![AppExtrinsic {
 				app_id: avail_core::AppId(0),
@@ -199,31 +197,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					0,
 					HeaderVersion::V3,
 				);
-				if let Err(e) = tx.send(id) {
-					println!("failed to send #{:?} result back: {:?}", id, e);
-				}
+				info!("task #{:?} done.", id);
 			}
 		});
 		broadcast_txs.push(task_tx);
 	}
 
-	tokio::spawn(async move {
-		while let Some(id) = result_rx.recv().await {
-			log::info!("{:?} task done.", id);
-		}
-	});
-
 	let mut id = 0;
 	let mut thread_id = 0;
+	let mut ts = Instant::now();
 	loop {
 		for _ in 0..RPS {
 			id += 1;
 			if let Err(e) = broadcast_txs[thread_id].send(id) {
-				println!("failed to send task #{:?}: {:?}", id, e);
+				info!("failed to send task #{:?}: {:?}", id, e);
 			}
-			println!("sent task #{:?} to thread #{:?}", id, thread_id);
+			info!("sent task #{:?} to thread #{:?}", id, thread_id);
 			thread_id = (thread_id + 1) % N;
 		}
-		tokio::time::sleep(Duration::from_secs(1)).await;
+		ts += Duration::from_secs(1);
+		sleep_until(ts).await;
 	}
 }
