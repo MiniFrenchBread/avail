@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate tracing;
 
-use std::{error::Error, str::FromStr, time::Duration};
+use std::{error::Error, num::NonZeroU16, str::FromStr, time::Duration};
 
 use avail_core::{header::HeaderExtension, AppExtrinsic, HeaderVersion};
 use frame_system::limits::BlockLength;
 use kate::{gridgen::EvaluationGrid, Seed};
 use sp_core::H256;
-use sp_runtime::SaturatedConversion;
+use sp_runtime::{Perbill, SaturatedConversion};
 use tokio::time::{sleep_until, Instant};
 use tracing::Level;
 
@@ -103,6 +103,13 @@ fn build_extension(
 			return get_empty_header(data_root, version);
 		},
 	};
+	match grid.extend_columns(NonZeroU16::new(2).expect("2>0")) {
+		Ok(_) => {},
+		Err(message) => {
+			error!("Error extending grid {:?}", e);
+			return get_empty_header(data_root, version);
+		},
+	}
 
 	// Build the commitment
 	let timer = std::time::Instant::now();
@@ -131,10 +138,18 @@ fn build_extension(
 
 	let app_lookup = grid.lookup().clone();
 
+	info!(
+		"grid lookup len: {:?}, grid dims: {:?}, commit length: {:?}",
+		grid.lookup().len(),
+		grid.dims(),
+		commitment.len()
+	);
+
 	let header_extension = match version {
 		HeaderVersion::V3 => {
 			use avail_core::kate_commitment::v3::KateCommitment;
 			let kate = KateCommitment::new(rows, cols, data_root, commitment);
+			info!("extension rows: {:?}, columns: {:?}", rows, cols);
 			v3::HeaderExtension {
 				app_lookup,
 				commitment: kate,
@@ -188,8 +203,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 				app_id: avail_core::AppId(0),
 				data: vec![0; BLOB_SIZE],
 			}];
-			let block_length = BlockLength::default();
+
+			let block_length =
+				BlockLength::max_with_normal_ratio(10 * 1024 * 1024, Perbill::from_percent(75));
 			while let Some(id) = task_rx.recv().await {
+				let ts = Instant::now();
 				build(
 					extrinsics.clone(),
 					H256::zero(),
@@ -197,7 +215,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					0,
 					HeaderVersion::V3,
 				);
-				info!("task #{:?} done.", id);
+				info!(
+					"task #{:?} done. time elapsed: {:?}s.",
+					id,
+					ts.elapsed().as_millis()
+				);
 			}
 		});
 		broadcast_txs.push(task_tx);
@@ -212,7 +234,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			if let Err(e) = broadcast_txs[thread_id].send(id) {
 				info!("failed to send task #{:?}: {:?}", id, e);
 			}
-			info!("sent task #{:?} to thread #{:?}", id, thread_id);
+			info!("task #{:?} sent to thread #{:?}", id, thread_id);
 			thread_id = (thread_id + 1) % N;
 		}
 		ts += Duration::from_secs(1);
