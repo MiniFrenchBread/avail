@@ -247,16 +247,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	tokio::spawn(async move {
 		let mut cnt = 0;
 		let mut used = 0;
+		let mut max_delay = 0;
 		let ts = Instant::now();
 		while let Some(delay) = response_rx.recv().await {
 			used += delay;
 			cnt += 1;
+			if delay > max_delay {
+				max_delay = delay;
+			}
 			if cnt % 10 == 0 {
 				info!(
-					"time elapsed: {:?}s, total finished task: {:?}, average delay: {:?} ms",
+					"time elapsed: {:?}s, total finished task: {:?}, average/max delay: {:?}/{:?} ms",
 					ts.elapsed().as_secs(),
 					cnt,
-					used / cnt
+					used / cnt,
+					max_delay
 				);
 			}
 		}
