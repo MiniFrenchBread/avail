@@ -81,49 +81,53 @@ fn build_extension(
 	_block_number: u32,
 	seed: Seed,
 	version: HeaderVersion,
+	log: bool,
 ) -> HeaderExtension {
-	use avail_base::metrics::avail::HeaderExtensionBuilderMetrics;
 	use avail_core::header::extension::v3;
 
-	let build_extension_start = std::time::Instant::now();
-
 	// Build the grid
-	let timer = std::time::Instant::now();
+	let mut timer = std::time::Instant::now();
 	let maybe_grid = build_grid(app_extrinsics, block_length, seed);
-	// Evaluation Grid Build Time Metrics
-	HeaderExtensionBuilderMetrics::observe_evaluation_grid_build_time(timer.elapsed());
 	let grid = match maybe_grid {
-		Ok(res) => res,
+		Ok(res) => {
+			if log {
+				info!("build grid used {:?}ms", timer.elapsed().as_millis());
+				timer = std::time::Instant::now();
+			}
+			res
+		},
 		Err(message) => {
 			error!("NODE_CRITICAL_ERROR_001 - A critical error has occurred: {message:?}.");
 			error!("NODE_CRITICAL_ERROR_001 - If you see this, please warn Avail team and raise an issue.");
-			HeaderExtensionBuilderMetrics::observe_total_execution_time(
-				build_extension_start.elapsed(),
-			);
 			return get_empty_header(data_root, version);
 		},
 	};
 	match grid.extend_columns(NonZeroU16::new(2).expect("2>0")) {
-		Ok(_) => {},
+		Ok(extended_grid) => {
+			if log {
+				info!("extended grid dims: {:?}", extended_grid.dims());
+				info!("extend grid used {:?}ms", timer.elapsed().as_millis());
+				timer = std::time::Instant::now();
+			}
+		},
 		Err(message) => {
-			error!("Error extending grid {:?}", e);
+			error!("Error extending grid {:?}", message);
 			return get_empty_header(data_root, version);
 		},
 	}
 
 	// Build the commitment
-	let timer = std::time::Instant::now();
 	let maybe_commitment = build_commitment(&grid);
-	// Commitment Build Time Metrics
-	HeaderExtensionBuilderMetrics::observe_commitment_build_time(timer.elapsed());
 	let commitment = match maybe_commitment {
-		Ok(res) => res,
+		Ok(res) => {
+			if log {
+				info!("build commitment used {:?}ms", timer.elapsed().as_millis());
+			}
+			res
+		},
 		Err(message) => {
 			error!("NODE_CRITICAL_ERROR_002 - A critical error has occurred: {message:?}.");
 			error!("NODE_CRITICAL_ERROR_002 - If you see this, please warn Avail team and raise an issue.");
-			HeaderExtensionBuilderMetrics::observe_total_execution_time(
-				build_extension_start.elapsed(),
-			);
 			return get_empty_header(data_root, version);
 		},
 	};
@@ -132,24 +136,21 @@ fn build_extension(
 	let rows = grid.dims().rows().get();
 	let cols = grid.dims().cols().get();
 
-	// Grid Metrics
-	HeaderExtensionBuilderMetrics::observe_grid_rows(rows as f64);
-	HeaderExtensionBuilderMetrics::observe_grid_cols(cols as f64);
-
 	let app_lookup = grid.lookup().clone();
 
-	info!(
-		"grid lookup len: {:?}, grid dims: {:?}, commit length: {:?}",
-		grid.lookup().len(),
-		grid.dims(),
-		commitment.len()
-	);
+	if log {
+		info!(
+			"grid lookup len: {:?}, grid dims: {:?}, commit length: {:?}",
+			grid.lookup().len(),
+			grid.dims(),
+			commitment.len()
+		);
+	}
 
 	let header_extension = match version {
 		HeaderVersion::V3 => {
 			use avail_core::kate_commitment::v3::KateCommitment;
 			let kate = KateCommitment::new(rows, cols, data_root, commitment);
-			info!("extension rows: {:?}, columns: {:?}", rows, cols);
 			v3::HeaderExtension {
 				app_lookup,
 				commitment: kate,
@@ -157,9 +158,6 @@ fn build_extension(
 			.into()
 		},
 	};
-
-	// Total Execution Time Metrics
-	HeaderExtensionBuilderMetrics::observe_total_execution_time(build_extension_start.elapsed());
 
 	header_extension
 }
@@ -170,6 +168,7 @@ fn build(
 	block_length: BlockLength,
 	block_number: u32,
 	version: HeaderVersion,
+	log: bool,
 ) -> HeaderExtension {
 	let seed: [u8; 32] = [0; 32];
 
@@ -180,12 +179,13 @@ fn build(
 		block_number,
 		seed,
 		version,
+		log,
 	)
 }
 
 const N: usize = 64;
-const RPS: u32 = 20;
-const BLOB_SIZE: usize = 496 * 1024 * 2;
+const RPS: u32 = 1;
+const BLOB_SIZE: usize = 496 * 1024 * 16 - 10;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -214,6 +214,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					block_length.clone(),
 					0,
 					HeaderVersion::V3,
+					id == 1,
 				);
 				info!(
 					"task #{:?} done. time elapsed: {:?}s.",
