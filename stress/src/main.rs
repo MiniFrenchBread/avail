@@ -129,7 +129,7 @@ fn build_extension(
 	}
 
 	// Build the commitment
-	let maybe_commitment = build_commitment(&grid);
+	let maybe_commitment = build_commitment(&grid, log);
 	let commitment = match maybe_commitment {
 		Ok(res) => {
 			if log {
