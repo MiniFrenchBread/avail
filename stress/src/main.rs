@@ -170,7 +170,7 @@ fn build(
 	version: HeaderVersion,
 	log: bool,
 ) -> HeaderExtension {
-	let seed: [u8; 32] = [0; 32];
+	let seed: [u8; 32] = rand::random();
 
 	build_extension(
 		&app_extrinsics,
@@ -199,9 +199,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	for _ in 0..N {
 		let (task_tx, mut task_rx) = tokio::sync::mpsc::unbounded_channel();
 		tokio::spawn(async move {
+			let mut data = vec![];
+			for _ in 0..BLOB_SIZE {
+				data.push(rand::random());
+			}
 			let extrinsics = vec![AppExtrinsic {
 				app_id: avail_core::AppId(0),
-				data: vec![0; BLOB_SIZE],
+				data,
 			}];
 
 			let block_length =

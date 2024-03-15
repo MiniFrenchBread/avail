@@ -38,3 +38,4 @@ binary-merkle-tree = { workspace = true, default-features = false }
 bounded-collections = { version = "0.2.0", default-features = false }
 
 tokio = { version = "1.28.1", features = ["full"] }
+rand = "0.8.5"

@@ -10690,6 +10690,7 @@ dependencies = [
  "log",
  "once_cell",
  "parity-scale-codec",
+ "rand",
  "rs_merkle",
  "scale-info",
  "serde",
