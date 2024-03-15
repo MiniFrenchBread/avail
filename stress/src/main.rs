@@ -29,7 +29,7 @@ pub fn get_empty_header(data_root: H256, version: HeaderVersion) -> HeaderExtens
 	}
 }
 
-pub fn build_commitment(grid: &EvaluationGrid) -> Result<Vec<u8>, String> {
+pub fn build_commitment(grid: &EvaluationGrid, log: bool) -> Result<Vec<u8>, String> {
 	use kate::gridgen::AsBytes;
 	use once_cell::sync::Lazy;
 
@@ -37,13 +37,25 @@ pub fn build_commitment(grid: &EvaluationGrid) -> Result<Vec<u8>, String> {
 	static PMP: Lazy<kate::pmp::m1_blst::M1NoPrecomp> =
 		Lazy::new(kate::couscous::multiproof_params);
 
+	let mut timer = std::time::Instant::now();
+
 	let poly_grid = grid
 		.make_polynomial_grid()
 		.map_err(|e| format!("Make polynomial grid failed: {e:?}"))?;
+	if log {
+		info!("make polynomial used {:?}ms", timer.elapsed().as_millis());
+		timer = std::time::Instant::now();
+	}
 
 	let extended_grid = poly_grid
 		.extended_commitments(&*PMP, 2)
 		.map_err(|e| format!("Grid extension failed: {e:?}"))?;
+	if log {
+		info!(
+			"extend commitments used {:?}ms",
+			timer.elapsed().as_millis()
+		);
+	}
 
 	let mut commitment = Vec::new();
 	for c in extended_grid.iter() {
@@ -221,7 +233,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					id == 1,
 				);
 				info!(
-					"task #{:?} done. time elapsed: {:?}s.",
+					"task #{:?} done. time elapsed: {:?}ms.",
 					id,
 					ts.elapsed().as_millis()
 				);
