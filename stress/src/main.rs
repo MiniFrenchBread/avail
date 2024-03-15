@@ -207,22 +207,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
 		.with_max_level(Level::from_str("info").unwrap())
 		.init();
 
+	let (response_tx, mut response_rx) = tokio::sync::mpsc::unbounded_channel();
 	let mut broadcast_txs = vec![];
 	for _ in 0..N {
 		let (task_tx, mut task_rx) = tokio::sync::mpsc::unbounded_channel();
+		let tx = response_tx.clone();
 		tokio::spawn(async move {
-			let mut data = vec![];
-			for _ in 0..BLOB_SIZE {
-				data.push(rand::random());
-			}
-			let extrinsics = vec![AppExtrinsic {
-				app_id: avail_core::AppId(0),
-				data,
-			}];
-
 			let block_length =
 				BlockLength::max_with_normal_ratio(10 * 1024 * 1024, Perbill::from_percent(75));
 			while let Some(id) = task_rx.recv().await {
+				let mut data = vec![];
+				for _ in 0..BLOB_SIZE {
+					data.push(rand::random());
+				}
+				let extrinsics = vec![AppExtrinsic {
+					app_id: avail_core::AppId(id as u32),
+					data,
+				}];
+
 				let ts = Instant::now();
 				build(
 					extrinsics.clone(),
@@ -232,15 +234,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
 					HeaderVersion::V3,
 					id == 1,
 				);
-				info!(
-					"task #{:?} done. time elapsed: {:?}ms.",
-					id,
-					ts.elapsed().as_millis()
-				);
+				let delay = ts.elapsed().as_millis();
+				info!("task #{:?} done. time elapsed: {:?}ms.", id, delay);
+				if let Err(e) = tx.send(delay) {
+					info!("failed to send response #{:?}: {:?}", id, e);
+				}
 			}
 		});
 		broadcast_txs.push(task_tx);
 	}
+
+	tokio::spawn(async move {
+		let mut cnt = 0;
+		let mut used = 0;
+		while let Some(delay) = response_rx.recv().await {
+			used += delay;
+			cnt += 1;
+			if cnt % 10 == 0 {
+				info!(
+					"total finished task: {:?}, average delay: {:?} ms",
+					cnt,
+					used / cnt
+				);
+			}
+		}
+	});
 
 	let mut id = 0;
 	let mut thread_id = 0;
