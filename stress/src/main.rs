@@ -247,12 +247,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	tokio::spawn(async move {
 		let mut cnt = 0;
 		let mut used = 0;
+		let ts = Instant::now();
 		while let Some(delay) = response_rx.recv().await {
 			used += delay;
 			cnt += 1;
 			if cnt % 10 == 0 {
 				info!(
-					"total finished task: {:?}, average delay: {:?} ms",
+					"time elapsed: {:?}s, total finished task: {:?}, average delay: {:?} ms",
+					ts.elapsed().as_secs(),
 					cnt,
 					used / cnt
 				);
